@@ -1,7 +1,7 @@
 import {IContext, IModule} from './abstractions';
-import {Loader, Context} from './concretes';
+import {Loader, Context, Module} from './concretes';
 
-export {IContext, IModule};
+export {IContext, IModule, Module};
 
 /** Run Autoloader for settled directories and return created Context */
 export function run(dirs: string[]): IContext {

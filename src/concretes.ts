@@ -6,6 +6,25 @@ import {IContext, IModule} from './abstractions';
 /** Cached "require" */
 const __require: NodeRequire = require;
 
+/**
+ * Common concrete implementation of module to autoload
+ */
+export abstract class Module<EXPORTS> implements IModule {
+    /** Module id */
+    public id: string;
+    /** Internal boostrap function (defines by user) */
+    private bootstrapInternal_: (context?: IContext) => EXPORTS;
+
+    public constructor(bootstrapInternal: (context?: IContext) => EXPORTS) {
+        this.bootstrapInternal_ = bootstrapInternal;
+    }
+
+    /** Outer bootstrap wrapper method */
+    public bootstrap(context?: IContext): EXPORTS {
+        return this.bootstrapInternal_(context);
+    }
+}
+
 /** Loader */
 export class Loader {
 
@@ -113,7 +132,7 @@ export class Context implements IContext {
             this.notInitalized_.delete(id);
         } else {
             throw new Error(
-                `Module with id="${id} not registered by Autoloader"`
+                `Module with id="${id}" not registered by Autoloader`
             );
         }
         return result;
