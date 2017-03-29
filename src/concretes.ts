@@ -1,5 +1,30 @@
+/*
+ * Copyright 2017 Alexander Sychev
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     1. Redistributions of source code must retain the above copyright notice,
+ *        this list of conditions and the following disclaimer.
+ *     2. Redistributions in binary form must reproduce the above copyright
+ *        notice, this list of conditions and the following disclaimer in the
+ *        documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+ * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 import * as glob from 'glob';
-import {join as pathJoin, extname} from 'path';
+import {join as pathJoin, extname, isAbsolute as isPathAbsolute} from 'path';
 import * as _ from 'lodash';
 import {IContext, IModule} from './abstractions';
 
@@ -12,10 +37,18 @@ const __require: NodeRequire = require;
 export abstract class Module<EXPORTS> implements IModule {
     /** Module id */
     public id: string;
+    /** Is module need lazy bootstraping */
+    public lazy: boolean;
     /** Internal boostrap function (defines by user) */
     private bootstrapInternal_: (context?: IContext) => EXPORTS;
 
-    public constructor(bootstrapInternal: (context?: IContext) => EXPORTS) {
+    public constructor(
+        id: string,
+        bootstrapInternal: (context?: IContext) => EXPORTS,
+        opt_lazy?: boolean
+    ) {
+        this.id = id;
+        this.lazy = opt_lazy || false;
         this.bootstrapInternal_ = bootstrapInternal;
     }
 
@@ -33,11 +66,13 @@ export class Loader {
 
     /** Init loader by directories */
     public constructor(dirs?: string[]) {
+        _.forEach(dirs, this.lintDir_);
         this.dirs_ = dirs ? _.uniq(_.compact(dirs)) : [];
     }
 
     /** Add directory to search modules */
     public addDir(dir: string): void {
+        this.lintDir_(dir);
         this.dirs_.push(dir);
     }
 
@@ -86,6 +121,15 @@ export class Loader {
             (modulePath) => <IModule>__require(modulePath)
         );
     }
+
+    /** Lind directory path (check that path is absolute) */
+    private lintDir_(dir: string): void {
+        if (!isPathAbsolute(dir)) {
+            throw new Error(
+                `"${dir}" <== Root autoload directory path must be absolute!`
+            );
+        }
+    }
 };
 
 /** Concrete context implementation */
@@ -106,6 +150,7 @@ export class Context implements IContext {
         this.otherContexts_ = new Map<string, IContext>();
 
         loader.loadModules().forEach(this.baseModuleInit_, this);
+        this.bootstrapIfNotLazy_();
     }
 
     /** Put other context to this */
@@ -140,10 +185,24 @@ export class Context implements IContext {
 
     /** Base init of all modules */
     private baseModuleInit_(module: IModule): void {
+        if (_.isNil(module.id)) {
+            throw new Error(
+                'Autoloadable module must export "id" field at least!'
+            );
+        }
+
         if (_.isNil(module.bootstrap)) {
             this.cache_.set(module.id, module);
         } else {
             this.notInitalized_.set(module.id, module);
+        }
+    }
+
+    /** Automatic bootstrap module if it is not lazy */
+    private bootstrapIfNotLazy_(): void {
+        for (let id of this.notInitalized_.keys()) {
+            let isLazy = Boolean(this.notInitalized_.get(id).lazy);
+            if (!isLazy) this.getModule(id);
         }
     }
 }
