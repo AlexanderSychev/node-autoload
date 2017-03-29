@@ -1,6 +1,6 @@
 {
   "name": "node-autoload",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Node.JS Modules Autoload",
   "main": "dist/index.js",
   "repository": {
